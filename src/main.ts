@@ -1,0 +1,21 @@
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from '@/app.module';
+
+async function bootstrap() {
+    try {
+        const app = await NestFactory.create(AppModule);
+
+        app.enableCors({
+            origin: process.env.CORS_ORIGIN,
+            methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+            preflightContinue: false,
+            optionsSuccessStatus: 204,
+            credentials: true,
+        });
+
+        await app.listen(3000);
+    } catch (error) {
+        console.error(error);
+    }
+}
+bootstrap();
