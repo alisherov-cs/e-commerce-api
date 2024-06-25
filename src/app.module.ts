@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
+import { ShopInfoResolver } from '@/features/shop-info/shop-info.resolver';
+import { ShopInfoService } from './features/shop-info/shop-info.service';
+import { ShopInfoModule } from './features/shop-info/shop-info.module';
 
 @Module({
     imports: [
@@ -10,7 +13,8 @@ import { join } from 'path';
             playground: true,
             autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
         }),
+        ShopInfoModule,
     ],
-    providers: [],
+    providers: [ShopInfoResolver, ShopInfoService],
 })
 export class AppModule {}
