@@ -45,15 +45,17 @@ describe('ShopInfoResolver', () => {
                             findFirstOrThrow: jest.fn(),
                             create: jest.fn(),
                             update: jest.fn(),
-                            delete: jest.fn(),
+                            deleteMany: jest.fn(),
                         },
                         openAt: {
                             create: jest.fn(),
                             update: jest.fn(),
+                            deleteMany: jest.fn(),
                         },
                         socialMedia: {
                             create: jest.fn(),
                             update: jest.fn(),
+                            deleteMany: jest.fn(),
                         },
                     },
                 },
@@ -157,7 +159,7 @@ describe('ShopInfoResolver', () => {
         (dbService.shopInfo.findFirstOrThrow as jest.Mock).mockResolvedValue(
             mockShopInfo,
         );
-        (dbService.shopInfo.delete as jest.Mock).mockResolvedValue(
+        (dbService.shopInfo.deleteMany as jest.Mock).mockResolvedValue(
             mockShopInfo,
         );
 

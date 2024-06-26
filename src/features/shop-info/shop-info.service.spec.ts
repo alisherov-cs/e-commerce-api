@@ -20,15 +20,17 @@ describe('ShopInfoService', () => {
                             findFirstOrThrow: jest.fn(),
                             create: jest.fn(),
                             update: jest.fn(),
-                            delete: jest.fn(),
+                            deleteMany: jest.fn(),
                         },
                         openAt: {
                             create: jest.fn(),
                             update: jest.fn(),
+                            deleteMany: jest.fn(),
                         },
                         socialMedia: {
                             create: jest.fn(),
                             update: jest.fn(),
+                            deleteMany: jest.fn(),
                         },
                     },
                 },
@@ -240,17 +242,14 @@ describe('ShopInfoService', () => {
             (
                 dbService.shopInfo.findFirstOrThrow as jest.Mock
             ).mockResolvedValue(existingShopInfo);
-            (dbService.shopInfo.delete as jest.Mock).mockResolvedValue(
+            (dbService.shopInfo.deleteMany as jest.Mock).mockResolvedValue(
                 existingShopInfo,
             );
 
             const result = await service.deleteShopInfo();
 
             expect(result).toEqual(existingShopInfo);
-            expect(dbService.shopInfo.delete).toHaveBeenCalledWith({
-                where: { id: existingShopInfo.id },
-                include: { socialMedia: true, openAt: true },
-            });
+            expect(dbService.shopInfo.deleteMany).toHaveBeenCalledWith();
         });
     });
 });

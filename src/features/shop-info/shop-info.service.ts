@@ -122,10 +122,9 @@ export class ShopInfoService {
 
     async deleteShopInfo(): Promise<ShopInfo> {
         const shopInfoExists = await this.getShopInfo();
-        await this.db.shopInfo.delete({
-            where: { id: shopInfoExists.id },
-            include: { socialMedia: true, openAt: true },
-        });
+        await this.db.openAt.deleteMany();
+        await this.db.socialMedia.deleteMany();
+        await this.db.shopInfo.deleteMany();
         return shopInfoExists;
     }
 }
