@@ -1,0 +1,83 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type ShopInfoModel {
+  id: ID!
+  address: String!
+  phoneNumber: String!
+  email: String!
+  openAt: [OpenAtModel!]!
+  socialMedia: [SocialMediaModel!]!
+}
+
+type OpenAtModel {
+  id: ID!
+  weekDayFrom: String!
+  weekDayTo: String!
+  timeFrom: DateTime!
+  timeTo: DateTime!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type SocialMediaModel {
+  id: ID!
+  name: String!
+  link: String!
+}
+
+type Query {
+  shopInfo: ShopInfoModel!
+}
+
+type Mutation {
+  createShopInfo(shopInfo: ShopInfoCreateModel!): ShopInfoModel!
+  updateShopInfo(shopInfo: ShopInfoUpdateModel!): ShopInfoModel!
+  deleteShopInfo: ShopInfoModel!
+}
+
+input ShopInfoCreateModel {
+  address: String!
+  phoneNumber: String!
+  email: String!
+  openAt: [OpenAtCreateModel!]!
+  socialMedia: [SocialMediaCreateModel!]!
+}
+
+input OpenAtCreateModel {
+  weekDayFrom: String!
+  weekDayTo: String!
+  timeFrom: DateTime!
+  timeTo: DateTime!
+}
+
+input SocialMediaCreateModel {
+  name: String!
+  link: String!
+}
+
+input ShopInfoUpdateModel {
+  address: String
+  phoneNumber: String
+  email: String
+  openAt: [OpenAtUpdateModel!]
+  socialMedia: [SocialMediaUpdateModel!]
+}
+
+input OpenAtUpdateModel {
+  id: ID!
+  weekDayFrom: String
+  weekDayTo: String
+  timeFrom: DateTime
+  timeTo: DateTime
+}
+
+input SocialMediaUpdateModel {
+  id: ID!
+  name: String
+  link: String
+}

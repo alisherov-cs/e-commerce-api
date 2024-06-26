@@ -27,10 +27,10 @@ export class OpenAtModel {
     @Field(() => ID)
     id: number;
 
-    @Field(() => WeekDay)
+    @Field(() => String)
     weekDayFrom: WeekDay;
 
-    @Field(() => WeekDay)
+    @Field(() => String)
     weekDayTo: WeekDay;
 
     @Field(() => Date)
