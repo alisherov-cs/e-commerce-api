@@ -30,14 +30,36 @@ type SocialMediaModel {
   link: String!
 }
 
+type UserModel {
+  id: ID!
+  email: String!
+  password: String!
+  roles: [String!]!
+}
+
+type AuthModel {
+  access_token: String!
+  refresh_token: String!
+}
+
 type Query {
   shopInfo: ShopInfoModel!
+  getUsers: [UserModel!]!
+  getUserById(id: Float!): UserModel!
+  getUserByEmail(email: String!): UserModel!
 }
 
 type Mutation {
   createShopInfo(shopInfo: ShopInfoCreateModel!): ShopInfoModel!
   updateShopInfo(shopInfo: ShopInfoUpdateModel!): ShopInfoModel!
   deleteShopInfo: ShopInfoModel!
+  createUser(user: UserCreateModel!): UserModel!
+  updateUser(id: Float!, user: UserUpdateModel!): UserModel!
+  deleteUser(id: Float!): UserModel!
+  login(auth: AuthCreateModel!): AuthModel!
+  register(auth: AuthCreateModel!): AuthModel!
+  registerAdmin(auth: AuthCreateModel!): AuthModel!
+  refresh(refreshToken: String!): AuthModel!
 }
 
 input ShopInfoCreateModel {
@@ -80,4 +102,21 @@ input SocialMediaUpdateModel {
   id: ID!
   name: String
   link: String
+}
+
+input UserCreateModel {
+  email: String!
+  password: String!
+  roles: [String!]!
+}
+
+input UserUpdateModel {
+  email: String
+  password: String
+  roles: [String!]
+}
+
+input AuthCreateModel {
+  email: String!
+  password: String!
 }

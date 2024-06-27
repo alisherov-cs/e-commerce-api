@@ -4,8 +4,13 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
 import { DatabaseModule } from '@/database/database.module';
 import { ShopInfoResolver } from '@/features/shop-info/shop-info.resolver';
-import { ShopInfoService } from '@/features/shop-info/shop-info.service';
 import { ShopInfoModule } from '@/features/shop-info/shop-info.module';
+import { AuthenticationModule } from '@/features/authentication/authentication.module';
+import { UsersModule } from '@/features/users/users.module';
+import { CryptoModule } from '@/shared/modules/crypto/crypto.module';
+import { UsersResolver } from '@/features/users/users.resolver';
+import { AuthenticationResolver } from '@/features/authentication/authentication.resolver';
+import { ShopInfoService } from '@/features/shop-info/shop-info.service';
 
 @Module({
     imports: [
@@ -13,10 +18,19 @@ import { ShopInfoModule } from '@/features/shop-info/shop-info.module';
             driver: ApolloDriver,
             playground: true,
             autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+            context: ({ req }) => ({ req }),
         }),
         DatabaseModule,
         ShopInfoModule,
+        AuthenticationModule,
+        UsersModule,
+        CryptoModule,
     ],
-    providers: [ShopInfoResolver, ShopInfoService],
+    providers: [
+        ShopInfoResolver,
+        ShopInfoService,
+        UsersResolver,
+        AuthenticationResolver,
+    ],
 })
 export class AppModule {}
