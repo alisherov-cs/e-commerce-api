@@ -4,6 +4,10 @@ import { ShopInfoService } from './shop-info.service';
 import { ShopInfo } from '@prisma/client';
 import { ShopInfoCreateModel } from './models/shop-info.create.model';
 import { ShopInfoUpdateModel } from './models/shop-info.update.model';
+import { UseGuards } from '@nestjs/common';
+import { JWTAuthGuard } from '@/shared/guards/jwt-auth.guard';
+import { RolesGuard } from '@/shared/guards/roles.guard';
+import { Roles } from '@/shared/decorators/role.decorator';
 
 @Resolver(() => ShopInfoModel)
 export class ShopInfoResolver {
@@ -15,6 +19,8 @@ export class ShopInfoResolver {
     }
 
     @Mutation(() => ShopInfoModel)
+    @UseGuards(JWTAuthGuard, RolesGuard)
+    @Roles('admin')
     async createShopInfo(
         @Args('shopInfo') shopInfo: ShopInfoCreateModel,
     ): Promise<ShopInfo> {
@@ -22,6 +28,8 @@ export class ShopInfoResolver {
     }
 
     @Mutation(() => ShopInfoModel)
+    @UseGuards(JWTAuthGuard, RolesGuard)
+    @Roles('admin')
     async updateShopInfo(
         @Args('shopInfo') shopInfo: ShopInfoUpdateModel,
     ): Promise<ShopInfo> {
@@ -29,6 +37,8 @@ export class ShopInfoResolver {
     }
 
     @Mutation(() => ShopInfoModel)
+    @UseGuards(JWTAuthGuard, RolesGuard)
+    @Roles('admin')
     async deleteShopInfo(): Promise<ShopInfo> {
         return await this.shopInfoService.deleteShopInfo();
     }
