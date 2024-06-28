@@ -96,7 +96,7 @@ describe('Users (e2e)', () => {
 
     it('should not get users (permission denied)', async () => {
         const res = await request(app.getHttpServer()).post('/graphql').send({
-            query: '{ getUsers { id } }',
+            query: '{ users { id } }',
         });
         expect(res.body.errors[0].message).toEqual('Unauthorized');
     });
@@ -127,7 +127,7 @@ describe('Users (e2e)', () => {
             .post('/graphql')
             .send({
                 query: `{
-                getUsers 
+                users 
                 { 
                     id 
                     email
@@ -143,7 +143,7 @@ describe('Users (e2e)', () => {
             .post('/graphql')
             .send({
                 query: `{
-                getUserByEmail(email: "test email") {
+                userByEmail(email: "test email") {
                     id
                     email
                     password
@@ -198,9 +198,9 @@ describe('Users (e2e)', () => {
                 .post('/graphql')
                 .set('Authorization', `Bearer ${await getAccessToken()}`)
                 .send({
-                    query: '{ getUsers { id } }',
+                    query: '{ users { id } }',
                 });
-            expect(res.body.data.getUsers).toHaveLength(1);
+            expect(res.body.data.users).toHaveLength(1);
         });
 
         it('should create user', async () => {
@@ -232,7 +232,7 @@ describe('Users (e2e)', () => {
                 .set('Authorization', `Bearer ${await getAccessToken()}`)
                 .send({
                     query: `{
-                    getUsers
+                    users
                     {
                         id
                         email
@@ -241,8 +241,8 @@ describe('Users (e2e)', () => {
                 }`,
                 });
             expect(res.status).toEqual(200);
-            expect(res.body.data.getUsers).toHaveLength(2);
-            expect(res.body.data.getUsers[1]).toEqual({
+            expect(res.body.data.users).toHaveLength(2);
+            expect(res.body.data.users[1]).toEqual({
                 id: expect.any(String),
                 email: 'test email',
                 password: expect.not.stringMatching('test password'),
@@ -255,7 +255,7 @@ describe('Users (e2e)', () => {
                 .set('Authorization', `Bearer ${await getAccessToken()}`)
                 .send({
                     query: `{
-                    getUserByEmail(email: "test email") {
+                    userByEmail(email: "test email") {
                         id
                         email
                         password
@@ -263,7 +263,7 @@ describe('Users (e2e)', () => {
                 }`,
                 });
             expect(res.status).toEqual(200);
-            expect(res.body.data.getUserByEmail).toEqual({
+            expect(res.body.data.userByEmail).toEqual({
                 id: expect.any(String),
                 email: 'test email',
                 password: expect.not.stringMatching('test password'),

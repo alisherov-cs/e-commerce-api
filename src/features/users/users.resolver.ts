@@ -15,21 +15,21 @@ export class UsersResolver {
     @Query(() => [UserModel])
     @UseGuards(JWTAuthGuard, RolesGuard)
     @Roles('admin')
-    async getUsers(@Context() _: any) {
+    async users(@Context() _: any) {
         return await this.usersService.getUsers();
     }
 
     @Query(() => UserModel)
     @UseGuards(JWTAuthGuard, RolesGuard)
     @Roles('admin')
-    async getUserById(@Args('id') id: number) {
+    async userById(@Args('id') id: number) {
         return await this.usersService.getUserById(id);
     }
 
     @Query(() => UserModel)
     @UseGuards(JWTAuthGuard, RolesGuard)
     @Roles('admin')
-    async getUserByEmail(@Args('email') email: string) {
+    async userByEmail(@Args('email') email: string) {
         return await this.usersService.getUserByEmail(email);
     }
 
