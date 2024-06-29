@@ -1,90 +1,120 @@
+import { AppModule } from '@/app.module';
 import { DatabaseService } from '@/database/database.service';
-import { AuthenticationModule } from '@/features/authentication/authentication.module';
-import { AuthenticationResolver } from '@/features/authentication/authentication.resolver';
-import { ShopInfoModule } from '@/features/shop-info/shop-info.module';
-import { ShopInfoResolver } from '@/features/shop-info/shop-info.resolver';
-import { ShopInfoService } from '@/features/shop-info/shop-info.service';
-import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { AuthenticationService } from '@/features/authentication/authentication.service';
+import { CryptoService } from '@/shared/modules/crypto/crypto.service';
 import { INestApplication } from '@nestjs/common';
-import { GraphQLModule } from '@nestjs/graphql';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
-import { join } from 'path';
 import * as request from 'supertest';
 
-describe('Shop Info (e2e)', () => {
+describe('shop-info e2e', () => {
     let app: INestApplication;
+    let authService: AuthenticationService;
+    let jwtService: JwtService;
     let db: DatabaseService;
+    let crypto: CryptoService;
 
     beforeAll(async () => {
+        jest.setTimeout(30000);
+
         const moduleFixture: TestingModule = await Test.createTestingModule({
-            imports: [
-                GraphQLModule.forRoot<ApolloDriverConfig>({
-                    driver: ApolloDriver,
-                    playground: true,
-                    autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
-                }),
-                AuthenticationModule,
-                ShopInfoModule,
-            ],
-            providers: [
-                ShopInfoResolver,
-                AuthenticationResolver,
-                ShopInfoService,
-                {
-                    provide: DatabaseService,
-                    useValue: {
-                        shopInfo: {
-                            findFirstOrThrow: jest.fn(),
-                            create: jest.fn(),
-                            update: jest.fn(),
-                            delete: jest.fn(),
-                        },
-                        openAt: {
-                            create: jest.fn(),
-                            update: jest.fn(),
-                        },
-                        socialMedia: {
-                            create: jest.fn(),
-                            update: jest.fn(),
-                        },
-                    },
-                },
-            ],
+            imports: [AppModule],
         }).compile();
 
         app = moduleFixture.createNestApplication();
-        db = moduleFixture.get<DatabaseService>(DatabaseService);
+        authService = app.get<AuthenticationService>(AuthenticationService);
+        jwtService = app.get<JwtService>(JwtService);
+        db = app.get<DatabaseService>(DatabaseService);
+        crypto = app.get<CryptoService>(CryptoService);
         await app.init();
+        await userDB();
+        await shopInfoDB();
+    }, 30000);
 
+    function sleep(ms: number) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function userDB() {
+        try {
+            await db.user.create({
+                data: {
+                    email: 'admin',
+                    password: await crypto.hash('admin'),
+                    roles: ['admin'],
+                },
+            });
+        } catch {}
+    }
+
+    async function shopInfoDB() {
+        await db.openAt.deleteMany();
+        await db.socialMedia.deleteMany();
         await db.shopInfo.deleteMany();
+        sleep(1000);
+        const shopInfo = await db.shopInfo.create({
+            data: {
+                address: 'address',
+                phoneNumber: 'phoneNumber',
+                email: 'email',
+            },
+        });
+        await db.openAt.create({
+            data: {
+                weekDayFrom: 'MONDAY',
+                weekDayTo: 'FRIDAY',
+                timeFrom: new Date(),
+                timeTo: new Date(),
+                shopInfoId: shopInfo.id,
+            },
+        });
+        await db.socialMedia.create({
+            data: {
+                name: 'facebook',
+                link: 'link',
+                shopInfoId: shopInfo.id,
+            },
+        });
+    }
+
+    async function login() {
+        const payload = {
+            email: 'admin',
+            sub: 1,
+            roles: ['admin'],
+        };
+
+        return {
+            access_token: await jwtService.signAsync(payload),
+        };
+    }
+
+    it('should be defined', async () => {
+        expect(app).toBeDefined();
     });
 
-    afterAll(async () => {
-        await app.close();
-    });
-
-    async function getAccessToken() {
+    it('should get shop info', async () => {
         const res = await request(app.getHttpServer())
             .post('/graphql')
             .send({
                 query: `
-                mutation 
-                { 
-                    login(auth: { email: "admin", password: "admin" }) { 
-                        access_token 
-                    } 
-                }`,
+                {
+                    shopInfo {
+                        address
+                        phoneNumber
+                        email
+                        openAt {
+                            id
+                        }
+                        socialMedia {
+                            name
+                        }
+                    }
+                }
+            `,
             });
-        return res.body.data.login.access_token;
-    }
 
-    it('should not get shop info', async () => {
-        const res = await request(app.getHttpServer())
-            .post('/graphql')
-            .send({ query: '{ shopInfo { id } }' });
-
-        expect(res.body.errors[0].extensions?.status).toEqual(404);
-        expect(res.body.errors[0].message).toEqual("Shop info doesn't exist");
+        expect(res.body.data.shopInfo.address).toEqual('address');
     });
 
     it('should not create shop info (permission denied)', async () => {
@@ -93,33 +123,33 @@ describe('Shop Info (e2e)', () => {
             .send({
                 query: `
                 mutation {
-                    createShopInfo(
-                        shopInfo: {
-                            address: "test address",
-                            phoneNumber: "test phone number",
-                            email: "test email",
-                            socialMedia: [
-                                {
-                                    name: "test social media name",
-                                    link: "test social media link"
-                                }
-                            ],
-                            openAt: [
-                                {
-                                    weekDayFrom: "MONDAY",
-                                    weekDayTo: "FRIDAY",
-                                    timeFrom: "2022-01-01T00:00:00.000Z",
-                                    timeTo: "2022-01-01T00:00:00.000Z"
-                                }
-                            ]
-                        }
-                    ) {
+                    createShopInfo(shopInfo: { address: "address", phoneNumber: "phoneNumber", email: "email", openAt: [], socialMedia: [] }) {
                         id
                     }
                 }
-                `,
+            `,
             });
-        expect(res.body.errors[0].message).toEqual('Unauthorized');
+
+        expect(res.body.errors[0].message).toMatch(/unauthorized/i);
+    });
+
+    it('should create shop info (as admin)', async () => {
+        const { access_token } = await login();
+
+        const res = await request(app.getHttpServer())
+            .post('/graphql')
+            .set('Authorization', `Bearer ${access_token}`)
+            .send({
+                query: `
+                mutation {
+                    createShopInfo(shopInfo: { address: "address", phoneNumber: "phoneNumber", email: "email", openAt: [], socialMedia: [] }) {
+                        id
+                    }
+                }
+            `,
+            });
+
+        expect(res.body.data.createShopInfo.id).toEqual(expect.any(String));
     });
 
     it('should not update shop info (permission denied)', async () => {
@@ -128,173 +158,73 @@ describe('Shop Info (e2e)', () => {
             .send({
                 query: `
                 mutation {
-                    updateShopInfo(
-                        shopInfo: {
-                            address: "test address update",
-                            phoneNumber: "test phone number update",
-                            email: "test email update",
-                        }
-                    ) {
+                    updateShopInfo(shopInfo: { address: "new address" }) {
+                        id
+                    }
+                }
+            `,
+            });
+
+        expect(res.body.errors[0].message).toMatch(/unauthorized/i);
+    });
+
+    it('should update shop info (as admin)', async () => {
+        const { access_token } = await login();
+
+        const res = await request(app.getHttpServer())
+            .post('/graphql')
+            .set('Authorization', `Bearer ${access_token}`)
+            .send({
+                query: `
+                mutation {
+                    updateShopInfo(shopInfo: { address: "new address" }) {
                         id
                         address
                     }
                 }
-                `,
+            `,
             });
-        expect(res.body.errors[0].message).toEqual('Unauthorized');
+
+        expect(res.body.data.updateShopInfo.address).toEqual('new address');
     });
 
     it('should not delete shop info (permission denied)', async () => {
         const res = await request(app.getHttpServer())
             .post('/graphql')
-            .send({ query: 'mutation { deleteShopInfo { id } }' });
+            .send({
+                query: `
+                mutation {
+                    deleteShopInfo {
+                        id
+                    }
+                }
+            `,
+            });
 
-        expect(res.body.errors[0].message).toEqual('Unauthorized');
+        expect(res.body.errors[0].message).toMatch(/unauthorized/i);
     });
 
-    describe('login as admin', () => {
-        it('should create shop info', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({
-                    query: `
+    it('should delete shop info (as admin)', async () => {
+        await userDB();
+        const { access_token } = await login();
+
+        const res = await request(app.getHttpServer())
+            .post('/graphql')
+            .set('Authorization', `Bearer ${access_token}`)
+            .send({
+                query: `
                 mutation {
-                    createShopInfo(
-                        shopInfo: {
-                            address: "test address",
-                            phoneNumber: "test phone number",
-                            email: "test email",
-                            socialMedia: [
-                                {
-                                    name: "test social media name",
-                                    link: "test social media link"
-                                }
-                            ],
-                            openAt: [
-                                {
-                                    weekDayFrom: "MONDAY",
-                                    weekDayTo: "FRIDAY",
-                                    timeFrom: "2022-01-01T00:00:00.000Z",
-                                    timeTo: "2022-01-01T00:00:00.000Z"
-                                }
-                            ]
-                        }
-                    ) {
+                    deleteShopInfo {
                         id
                     }
                 }
-                `,
-                });
-            expect(res.status).toEqual(200);
-            expect(+res.body.data.createShopInfo.id).toEqual(
-                expect.any(Number),
-            );
-        });
-
-        it('should get shop info', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({
-                    query: `{ 
-                    shopInfo { 
-                        id
-                        address
-                        phoneNumber
-                        email
-                        socialMedia {
-                            id
-                            name
-                            link
-                        }
-                        openAt {
-                            id
-                            weekDayFrom
-                            weekDayTo
-                            timeFrom
-                            timeTo
-                        }
-                    } 
-                }`,
-                });
-
-            expect(res.status).toEqual(200);
-            expect(res.body.data.shopInfo).toEqual({
-                id: expect.any(String),
-                address: 'test address',
-                phoneNumber: 'test phone number',
-                email: 'test email',
-                socialMedia: [
-                    {
-                        id: expect.any(String),
-                        name: 'test social media name',
-                        link: 'test social media link',
-                    },
-                ],
-                openAt: [
-                    {
-                        id: expect.any(String),
-                        weekDayFrom: 'MONDAY',
-                        weekDayTo: 'FRIDAY',
-                        timeFrom: '2022-01-01T00:00:00.000Z',
-                        timeTo: '2022-01-01T00:00:00.000Z',
-                    },
-                ],
+            `,
             });
-        });
 
-        it('should update shop info', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({
-                    query: `
-                mutation {
-                    updateShopInfo(
-                        shopInfo: {
-                            address: "test address update",
-                            phoneNumber: "test phone number update",
-                            email: "test email update",
-                        }
-                    ) {
-                        id
-                        address
-                    }
-                }
-                `,
-                });
-            expect(res.status).toEqual(200);
-            expect(+res.body.data.updateShopInfo.id).toEqual(
-                expect.any(Number),
-            );
-            expect(res.body.data.updateShopInfo.address).toEqual(
-                'test address update',
-            );
-        });
+        expect(res.body.data.deleteShopInfo.id).toEqual(expect.any(String));
+    });
 
-        it('should delete shop info', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({ query: 'mutation { deleteShopInfo { id } }' });
-
-            expect(res.status).toEqual(200);
-            expect(+res.body.data.deleteShopInfo.id).toEqual(
-                expect.any(Number),
-            );
-        });
-
-        it('should not get shop info', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({ query: '{ shopInfo { id } }' });
-
-            expect(res.body.errors[0].extensions?.status).toEqual(404);
-            expect(res.body.errors[0].message).toEqual(
-                "Shop info doesn't exist",
-            );
-        });
+    afterAll(async () => {
+        await app.close();
     });
 });

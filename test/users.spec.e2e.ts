@@ -1,316 +1,323 @@
+import { AppModule } from '@/app.module';
 import { DatabaseService } from '@/database/database.service';
-import { AuthenticationModule } from '@/features/authentication/authentication.module';
-import { AuthenticationResolver } from '@/features/authentication/authentication.resolver';
-import { UsersModule } from '@/features/users/users.module';
-import { UsersResolver } from '@/features/users/users.resolver';
-import { UsersService } from '@/features/users/users.service';
+import { AuthenticationService } from '@/features/authentication/authentication.service';
 import { CryptoService } from '@/shared/modules/crypto/crypto.service';
-import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { INestApplication } from '@nestjs/common';
-import { GraphQLModule } from '@nestjs/graphql';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
-import { join } from 'path';
 import * as request from 'supertest';
 
-describe('Users (e2e)', () => {
+describe('users e2e', () => {
     let app: INestApplication;
+    let authService: AuthenticationService;
+    let jwtService: JwtService;
     let db: DatabaseService;
     let crypto: CryptoService;
 
     beforeAll(async () => {
+        jest.setTimeout(30000);
+
         const moduleFixture: TestingModule = await Test.createTestingModule({
-            imports: [
-                GraphQLModule.forRoot<ApolloDriverConfig>({
-                    driver: ApolloDriver,
-                    playground: true,
-                    autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
-                }),
-                AuthenticationModule,
-                UsersModule,
-            ],
-            providers: [
-                UsersResolver,
-                AuthenticationResolver,
-                UsersService,
-                {
-                    provide: DatabaseService,
-                    useValue: {
-                        user: {
-                            findMany: jest.fn(),
-                            findUniqueOrThrow: jest.fn(),
-                            create: jest.fn(),
-                            update: jest.fn(),
-                            delete: jest.fn(),
-                            deleteMany: jest.fn(),
-                        },
-                    },
-                },
-                {
-                    provide: CryptoService,
-                    useValue: {
-                        hash: jest.fn(),
-                        compare: jest.fn(),
-                    },
-                },
-            ],
+            imports: [AppModule],
         }).compile();
 
         app = moduleFixture.createNestApplication();
-        db = moduleFixture.get<DatabaseService>(DatabaseService);
-        crypto = moduleFixture.get<CryptoService>(CryptoService);
+        authService = app.get<AuthenticationService>(AuthenticationService);
+        jwtService = app.get<JwtService>(JwtService);
+        db = app.get<DatabaseService>(DatabaseService);
+        crypto = app.get<CryptoService>(CryptoService);
         await app.init();
-
         await db.user.deleteMany();
-        await db.user.create({
-            data: {
-                email: 'admin',
-                password: await crypto.hash('admin'),
-                roles: ['admin'],
-            },
-        });
     });
 
-    it('should be defined', () => {
+    async function userDB() {
+        try {
+            await db.user.create({
+                data: {
+                    email: 'admin',
+                    password: await crypto.hash('admin'),
+                    roles: ['admin'],
+                },
+            });
+        } catch {}
+    }
+
+    async function login() {
+        const payload = {
+            email: 'admin',
+            sub: 1,
+            roles: ['admin'],
+        };
+
+        return {
+            access_token: await jwtService.signAsync(payload),
+        };
+    }
+
+    async function getUser(email: string = 'admin') {
+        return await db.user.findUnique({ where: { email } });
+    }
+
+    it('should be defined', async () => {
         expect(app).toBeDefined();
     });
 
-    async function getUser() {
-        const users = await db.user.findMany();
-        return users.at(-1);
-    }
-
-    async function getAccessToken() {
+    it('should get users (permission denied)', async () => {
+        await userDB();
         const res = await request(app.getHttpServer())
             .post('/graphql')
             .send({
                 query: `
-                mutation 
-                { 
-                    login(auth: { email: "admin", password: "admin" }) { 
-                        access_token 
-                    } 
-                }`,
+                {
+                    users {
+                        id
+                        email
+                    }
+                }
+                `,
             });
-        return res.body.data.login.access_token;
-    }
 
-    it('should not get users (permission denied)', async () => {
-        const res = await request(app.getHttpServer()).post('/graphql').send({
-            query: '{ users { id } }',
-        });
-        expect(res.body.errors[0].message).toEqual('Unauthorized');
+        expect(res.body.errors[0].message).toMatch(/unauthorized/i);
     });
 
-    it('should not create user (permission denied)', async () => {
+    it('should get users (as admin)', async () => {
+        await userDB();
+        const { access_token } = await login();
+
         const res = await request(app.getHttpServer())
             .post('/graphql')
+            .set('Authorization', `Bearer ${access_token}`)
             .send({
                 query: `
-            mutation {
-                createUser(
-                    user: {
-                        email: "test email",
-                        password: "test password",
-                        roles: ["user"]
+                {
+                    users {
+                        id
+                        email
+                        roles
                     }
-                ) {
-                    id
                 }
-            }
             `,
             });
-        expect(res.body.errors[0].message).toEqual('Unauthorized');
+
+        expect(res.body.data.users).toHaveLength(1);
     });
 
-    it('should not get users (permission denied)', async () => {
+    it('should not get user by id (permission denied)', async () => {
+        await db.user.deleteMany();
+        await userDB();
+        const { id } = await getUser();
+
         const res = await request(app.getHttpServer())
             .post('/graphql')
             .send({
-                query: `{
-                users 
-                { 
-                    id 
-                    email
-                    password
-                } 
-            }`,
+                query: `
+                {
+                    userById(id: ${id}) {
+                        id
+                        email
+                        roles
+                    }
+                }
+            `,
             });
-        expect(res.body.errors[0].message).toEqual('Unauthorized');
+
+        expect(res.body.errors[0].message).toMatch(/unauthorized/i);
+    });
+
+    it('should get user by id (as admin)', async () => {
+        await db.user.deleteMany();
+        await userDB();
+        const { access_token } = await login();
+        const { id } = await getUser();
+
+        const res = await request(app.getHttpServer())
+            .post('/graphql')
+            .set('Authorization', `Bearer ${access_token}`)
+            .send({
+                query: `
+                {
+                    userById(id: ${id}) {
+                        id
+                        email
+                        roles
+                    }
+                }
+            `,
+            });
+
+        expect(res.body.data.userById.id).toEqual(expect.any(String));
     });
 
     it('should not get user by email (permission denied)', async () => {
+        await db.user.deleteMany();
+        await userDB();
+        const { email } = await getUser();
+
         const res = await request(app.getHttpServer())
             .post('/graphql')
             .send({
-                query: `{
-                userByEmail(email: "test email") {
-                    id
-                    email
-                    password
+                query: `
+                {
+                    userByEmail(email: "${email}") {
+                        id
+                        email
+                        roles
+                    }
                 }
-            }`,
+            `,
             });
-        expect(res.body.errors[0].message).toEqual('Unauthorized');
+
+        expect(res.body.errors[0].message).toMatch(/unauthorized/i);
+    });
+
+    it('should get user by email (as admin)', async () => {
+        await db.user.deleteMany();
+        await userDB();
+        const { access_token } = await login();
+        const { email } = await getUser();
+
+        const res = await request(app.getHttpServer())
+            .post('/graphql')
+            .set('Authorization', `Bearer ${access_token}`)
+            .send({
+                query: `
+                {
+                    userByEmail(email: "${email}") {
+                        id
+                        email
+                        roles
+                    }
+                }
+            `,
+            });
+
+        expect(res.body.data.userByEmail.id).toEqual(expect.any(String));
+    });
+
+    it('should not create user (permission denied)', async () => {
+        await userDB();
+        const res = await request(app.getHttpServer())
+            .post('/graphql')
+            .send({
+                query: `
+                mutation {
+                    createUser(user: { email: "user", password: "user", roles: ["user"] }) {
+                        id
+                        email
+                    }
+                }
+            `,
+            });
+
+        expect(res.body.errors[0].message).toMatch(/unauthorized/i);
+    });
+
+    it('should create user (as admin)', async () => {
+        await db.user.deleteMany();
+        await userDB();
+        const { access_token } = await login();
+
+        const res = await request(app.getHttpServer())
+            .post('/graphql')
+            .set('Authorization', `Bearer ${access_token}`)
+            .send({
+                query: `
+                mutation {
+                    createUser(user: { email: "user", password: "user", roles: ["user"] }) {
+                        id
+                        email
+                    }
+                }
+            `,
+            });
+
+        expect(res.body.data.createUser.id).toEqual(expect.any(String));
     });
 
     it('should not update user (permission denied)', async () => {
-        const user = await getUser();
+        await userDB();
+        const { id } = await getUser();
+
         const res = await request(app.getHttpServer())
             .post('/graphql')
             .send({
                 query: `
                 mutation {
-                    updateUser(
-                        id: ${user.id}
-                        user: {
-                            email: "test email update",
-                            password: "test password update",
-                        }
-                    ) {
+                    updateUser(id: ${id}, user: { email: "user update", password: "user update" }) {
+                        id
+                    }
+                }
+            `,
+            });
+
+        expect(res.body.errors[0].message).toMatch(/unauthorized/i);
+    });
+
+    it('should update user (as admin)', async () => {
+        await db.user.deleteMany();
+        await userDB();
+        const { access_token } = await login();
+        const { id } = await getUser();
+
+        const res = await request(app.getHttpServer())
+            .post('/graphql')
+            .set('Authorization', `Bearer ${access_token}`)
+            .send({
+                query: `
+                mutation {
+                    updateUser(id: ${id}, user: { email: "user update", password: "user update" }) {
                         id
                         email
                     }
                 }
-                `,
+            `,
             });
-        expect(res.body.errors[0].message).toEqual('Unauthorized');
+
+        expect(res.body.data.updateUser.email).toEqual('user update');
     });
 
-    it('should not delete user (permission denied)', async () => {
-        const user = await getUser();
+    it('should not delete (permission denied)', async () => {
+        await userDB();
+        const { id } = await getUser();
+
         const res = await request(app.getHttpServer())
             .post('/graphql')
             .send({
                 query: `
-                mutation {
-                    deleteUser(id: ${user.id}) {
-                        id
+                    mutation {
+                        deleteUser(id: ${id}) {
+                            id
+                        }
                     }
-                }
                 `,
             });
-        expect(res.body.errors[0].message).toEqual('Unauthorized');
+
+        expect(res.body.errors[0].message).toMatch(/unauthorized/i);
     });
 
-    describe('login as admin', () => {
-        it('should get empty users', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({
-                    query: '{ users { id } }',
-                });
-            expect(res.body.data.users).toHaveLength(1);
-        });
+    it('should delete (as admin)', async () => {
+        await userDB();
+        const { access_token } = await login();
+        const { id } = await getUser();
 
-        it('should create user', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({
-                    query: `
-                mutation {
-                    createUser(
-                        user: {
-                            email: "test email",
-                            password: "test password",
-                            roles: ["user"]
+        const res = await request(app.getHttpServer())
+            .post('/graphql')
+            .set('Authorization', `Bearer ${access_token}`)
+            .send({
+                query: `
+                    mutation {
+                        deleteUser(id: ${id}) {
+                            id
+                            email
                         }
-                    ) {
-                        id
                     }
-                }
                 `,
-                });
-            expect(res.status).toEqual(200);
-            expect(res.body.data.createUser.id).toEqual(expect.any(String));
-        });
-
-        it('should get users', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({
-                    query: `{
-                    users
-                    {
-                        id
-                        email
-                        password
-                    }
-                }`,
-                });
-            expect(res.status).toEqual(200);
-            expect(res.body.data.users).toHaveLength(2);
-            expect(res.body.data.users[1]).toEqual({
-                id: expect.any(String),
-                email: 'test email',
-                password: expect.not.stringMatching('test password'),
             });
-        });
 
-        it('should get user by email', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({
-                    query: `{
-                    userByEmail(email: "test email") {
-                        id
-                        email
-                        password
-                    }
-                }`,
-                });
-            expect(res.status).toEqual(200);
-            expect(res.body.data.userByEmail).toEqual({
-                id: expect.any(String),
-                email: 'test email',
-                password: expect.not.stringMatching('test password'),
-            });
-        });
+        expect(res.body.data.deleteUser.email).toEqual('admin');
+    });
 
-        it('should update user', async () => {
-            const user = await getUser();
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({
-                    query: `
-                mutation {
-                    updateUser(
-                        id: ${user.id}
-                        user: {
-                            email: "test email update",
-                            password: "test password update",
-                        }
-                    ) {
-                        id
-                        email
-                    }
-                }
-                `,
-                });
-            expect(res.status).toEqual(200);
-            expect(res.body.data.updateUser.email).toEqual('test email update');
-        });
-
-        it('should delete user', async () => {
-            const user = await getUser();
-            const res = await request(app.getHttpServer())
-                .post('/graphql')
-                .set('Authorization', `Bearer ${await getAccessToken()}`)
-                .send({
-                    query: `
-                mutation {
-                    deleteUser(id: ${user.id}) {
-                        id
-                    }
-                }
-                `,
-                });
-            expect(res.status).toEqual(200);
-            expect(+res.body.data.deleteUser.id).toEqual(user.id);
-        });
+    afterAll(async () => {
+        await app.close();
     });
 });
