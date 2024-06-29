@@ -78,7 +78,9 @@ export class AuthenticationService {
         };
 
         return {
-            access_token: await this.jwtService.signAsync(payload),
+            access_token: await this.jwtService.signAsync(payload, {
+                secret: process.env.JWT_REFRESH_SECRET,
+            }),
             refresh_token: await this.generateRefreshToken(
                 existingUser.email,
                 existingUser.id,
